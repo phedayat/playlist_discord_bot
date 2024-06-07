@@ -3,7 +3,6 @@ import json
 
 import spotipy
 
-from multiprocessing import Pool
 from concurrent.futures import ThreadPoolExecutor
 
 from spotipy.oauth2 import SpotifyOAuth
@@ -32,6 +31,7 @@ def get_playlist_length():
         return res["tracks"]["total"]
     return 0
 
+  
 def _check_track_in_page(track_id, i, item_limit):
     res = sp.playlist_items(
         playlist_id=playlist_id,
