@@ -4,6 +4,7 @@ import json
 import spotipy
 
 from multiprocessing import Pool
+from concurrent.futures import ThreadPoolExecutor
 
 from spotipy.oauth2 import SpotifyOAuth
 
@@ -25,7 +26,7 @@ def _get_track_id(track_url):
 def build_track_uri(track_id):
     return f"spotify:track:{track_id}"
 
-def _get_playlist_length():
+def get_playlist_length():
     res = sp.playlist(playlist_id=playlist_id, fields="tracks.total")
     if res:
         return res["tracks"]["total"]
@@ -45,13 +46,27 @@ def _check_track_in_page(track_id, i, item_limit):
             return True
     return False
 
-def track_in_playlist(track_id):
-    item_limit = 100
-    n_total_tracks = _get_playlist_length()
-    n_pages = int(n_total_tracks/item_limit)+1
 
-    with Pool(n_pages) as p:
-        res = p.starmap(_check_track_in_page, [
+def track_in_playlist(track_id, n_tracks):
+    item_limit = 100
+    n_pages = int(n_tracks/item_limit)
+
+    for i in range(n_pages+1):
+        res = sp.playlist_items(playlist_id=playlist_id, fields="items.track.id", limit=item_limit, offset=i*item_limit)
+        if res:
+            items = res["items"]
+            ids = set([item["track"]["id"] for item in items])
+            if track_id in ids:
+                return True
+    return False
+
+def threaded_track_in_playlist(track_id, n_tracks):
+    item_limit = 100
+    max_workers = 3
+    n_pages = int(n_tracks/item_limit)+1
+
+    with ThreadPoolExecutor(max_workers=max_workers) as e:
+        res = e.map(lambda x: _check_track_in_page(*x), [
             (track_id, i, item_limit)
             for i in range(n_pages)
         ])
