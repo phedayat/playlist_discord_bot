@@ -2,12 +2,17 @@ import os
 import re
 
 from discord.client import Client
-from discord import DiscordException, Intents, Message
+from discord import (
+    Message,
+    Intents,
+    DiscordException,
+)
 
 from spotify_helper import (
     build_track_uri,
-    track_in_playlist,
+    get_playlist_length,
     add_track_to_playlist,
+    threaded_track_in_playlist,
 )
 
 message_regex_raw = r"[\s\S.]*https://\w+\.spotify.com/track/(\w+)\?[\s\S.]*"
@@ -24,8 +29,9 @@ class PlaylistBot(Client):
             res = re.match(message_regex, message.content)
             if res:
                 track_id = res.groups()[0]
+                n_tracks = get_playlist_length()
 
-                if track_in_playlist(track_id):
+                if threaded_track_in_playlist(track_id, n_tracks):
                     print(f"Track {track_id} exists")
                     await message.reply(f"Song already exists in playlist \"{self.playlist_name}\"")
                 else:
