@@ -1,7 +1,3 @@
-from dotenv import load_dotenv
-from time import perf_counter
-load_dotenv()
-
 import os
 import re
 
