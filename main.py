@@ -1,6 +1,3 @@
-from dotenv import load_dotenv
-load_dotenv()
-
 import os
 import re
 
@@ -26,6 +23,7 @@ message_regex = re.compile(message_regex_raw)
 class ShareType:
     SHARE_TYPE_ALBUM = "album"
     SHARE_TYPE_TRACK = "track"
+    SHARE_TYPE_PLAYLIST = "playlist"
 
 class PlaylistBot(Client):
     playlist_name = os.getenv("SPOTIFY_PLAYLIST_NAME")

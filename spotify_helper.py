@@ -65,6 +65,31 @@ def _get_album_tracks(album_id):
     if res:
         return [track["id"] for track in res["items"]]
 
+def _get_external_playlist_tracks(playlist_id):
+    item_limit = 100
+
+    res = sp.playlist(
+        playlist_id=playlist_id,
+        fields="tracks(total, items.track.id)",
+    )
+    if res:
+        out = []
+
+        tracks = res["tracks"]
+        out += [item["track"]["id"] for item in tracks["items"]]
+
+        n_pages = int(tracks["total"]/item_limit) + 1
+        for i in range(n_pages):
+            res = sp.playlist(
+                playlist_id=playlist_id,
+                fields="tracks(total, items.track.id)",
+            )
+            if res:
+                tracks = res["tracks"]
+                out += [item["track"]["id"] for item in tracks["items"]]
+        return out
+
+
 def threaded_album_tracks_not_in_playlist(album_id, n_tracks):
     item_limit = 100
     max_workers = 3
@@ -109,6 +134,11 @@ def get_tracks_to_add(share_type, asset_id, n_tracks):
             track_ids = set(album_tracks)
         else:
             track_ids = set()
+    elif share_type == "playlist":
+        if playlist_tracks := _get_external_playlist_tracks(asset_id):
+            track_ids = set(playlist_tracks)
+        else:
+            track_ids = set()
     else:
         track_ids = set([asset_id])
 
@@ -132,4 +162,4 @@ def add_track_to_playlist(track_uri):
     )
 
 if __name__=="__main__":
-    pass
+    _get_external_playlist_tracks("7a37PPTt4wIl9DspsWMUN9")
