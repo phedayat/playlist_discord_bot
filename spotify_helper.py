@@ -3,6 +3,7 @@ import json
 
 import spotipy
 
+from typing import Set
 from concurrent.futures import ThreadPoolExecutor
 
 from spotipy.oauth2 import SpotifyOAuth
@@ -47,15 +48,43 @@ def _check_track_in_page(track_id, i, item_limit):
     return False
 
 
-def track_in_playlist(track_id, n_tracks):
-    item_limit = 100
-    n_pages = int(n_tracks/item_limit)
+def _get_tracks_in_page(track_ids: Set[str], i: int, item_limit: int):
+    res = sp.playlist_items(
+        playlist_id=playlist_id,
+        fields="items.track.id",
+        limit=item_limit,
+        offset=i*item_limit,
+    )
+    if res:
+        items = frozenset([item["track"]["id"] for item in res["items"]])
+        return track_ids & items
 
-    for i in range(n_pages+1):
-        res = _check_track_in_page(track_id, i, item_limit)
-        if res:
-            return res
-    return False
+
+def _get_album_tracks(album_id):
+    res = sp.album_tracks(album_id=album_id)
+    if res:
+        return [track["id"] for track in res["items"]]
+
+def threaded_album_tracks_not_in_playlist(album_id, n_tracks):
+    item_limit = 100
+    max_workers = 3
+    n_pages = int(n_tracks/item_limit)+1
+
+    if album_tracks := _get_album_tracks(album_id):
+        track_ids = set(album_tracks)
+        with ThreadPoolExecutor(max_workers=max_workers) as e:
+            res = e.map(lambda x: _get_tracks_in_page(*x), [
+                (track_ids, i, item_limit)
+                for i in range(n_pages)
+            ])
+            if res:
+                tracks_in_playlist = set()
+                for x in res:
+                    if x:
+                        tracks_in_playlist |= x
+                print(tracks_in_playlist)
+                tracks = track_ids - tracks_in_playlist
+                return tracks if len(tracks) > 0 else None
 
 def threaded_track_in_playlist(track_id, n_tracks):
     item_limit = 100
@@ -68,6 +97,33 @@ def threaded_track_in_playlist(track_id, n_tracks):
             for i in range(n_pages)
         ])
         return any(res)
+
+
+def get_tracks_to_add(share_type, asset_id, n_tracks):
+    item_limit = 100
+    max_workers = 3
+    n_pages = int(n_tracks/item_limit)+1
+
+    if share_type == "album":
+        if album_tracks := _get_album_tracks(asset_id):
+            track_ids = set(album_tracks)
+        else:
+            track_ids = set()
+    else:
+        track_ids = set([asset_id])
+
+    with ThreadPoolExecutor(max_workers=max_workers) as e:
+        res = e.map(lambda x: _get_tracks_in_page(*x), [
+            (track_ids, i, item_limit)
+            for i in range(n_pages)
+        ])
+        if res:
+            tracks_in_playlist = set()
+            for tracks in res:
+                if tracks:
+                    tracks_in_playlist |= tracks
+            return track_ids - tracks_in_playlist
+
 
 def add_track_to_playlist(track_uri):
     return sp.playlist_add_items(
