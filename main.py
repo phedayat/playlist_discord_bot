@@ -13,8 +13,6 @@ from spotify_helper import (
     get_playlist_length,
     add_track_to_playlist,
     get_tracks_to_add,
-    threaded_track_in_playlist,
-    threaded_album_tracks_not_in_playlist,
 )
 
 message_regex_raw = r"[\s\S.]*https://\w+\.spotify.com/(\w+)/(\w+)\?[\s\S.]*"
@@ -56,25 +54,6 @@ class PlaylistBot(Client):
                     else:
                         await message.reply(f"Whole album already exists in playlist \"{self.playlist_name}\"")
                     return
-
-
-                # if share_type == self.SHARE_TYPE_ALBUM:
-                #     if tracks := threaded_album_tracks_not_in_playlist(asset_id, n_tracks):
-                #         for track_id in tracks:
-                #             track_uri = build_track_uri(track_id)
-                #             add_track_to_playlist(track_uri)
-                #         await message.reply(f"Album added to playlist \"{self.playlist_name}\"")
-                # else:
-                #     if threaded_track_in_playlist(asset_id, n_tracks):
-                #         print(f"Track {asset_id} exists")
-                #         await message.reply(f"Song already exists in playlist \"{self.playlist_name}\"")
-                #     else:
-                #         track_uri = build_track_uri(asset_id)
-                #         try:
-                #             add_track_to_playlist(track_uri)
-                #             await message.reply(f"Song added to playlist \"{self.playlist_name}\"")
-                #         except DiscordException as e:
-                #             print(f"Error: {e}")
 
 
 if __name__=="__main__":
