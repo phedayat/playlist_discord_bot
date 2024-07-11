@@ -19,8 +19,10 @@ sp = spotipy.Spotify(
     )
 )
 
+
 def build_track_uri(track_id):
     return f"spotify:track:{track_id}"
+
 
 def get_playlist_length():
     res = sp.playlist(playlist_id=playlist_id, fields="tracks.total")
@@ -37,7 +39,12 @@ def _get_tracks_in_page(track_ids: Set[str], i: int, item_limit: int):
         offset=i*item_limit,
     )
     if res:
-        items = frozenset([item["track"]["id"] for item in res["items"]])
+        l = [
+            item["track"]["id"]
+            for item in res["items"]
+            if item["track"]
+        ]
+        items = frozenset(l)
         return track_ids & items
 
 
@@ -55,10 +62,8 @@ def _get_external_playlist_tracks(playlist_id):
         fields="tracks(total, items.track.id)",
     )
     if res:
-        out = []
-
         tracks = res["tracks"]
-        out += [item["track"]["id"] for item in tracks["items"]]
+        out = [item["track"]["id"] for item in tracks["items"] if item["track"]]
 
         n_pages = int(tracks["total"]/item_limit) + 1
         for i in range(n_pages):
@@ -108,6 +113,3 @@ def add_track_to_playlist(track_uri):
         playlist_id=playlist_id,
         items=[track_uri],
     )
-
-if __name__=="__main__":
-    _get_external_playlist_tracks("7a37PPTt4wIl9DspsWMUN9")
