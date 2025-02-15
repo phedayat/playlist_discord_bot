@@ -2,7 +2,7 @@ import os
 
 import spotipy
 
-from typing import Set
+from typing import List, Set
 from concurrent.futures import ThreadPoolExecutor
 
 from spotipy.oauth2 import SpotifyOAuth
@@ -29,6 +29,23 @@ def get_playlist_length():
     if res:
         return res["tracks"]["total"]
     return 0
+
+
+# def get_tracks_names(track_ids: List[int]) -> List[str]:
+#     if track_ids == []:
+#         return []
+#     tracks = sp.tracks(track_ids)
+#     track_names = list(map(lambda x: x["name"], tracks))
+#     return track_names
+
+def get_track_name(track_id: str) -> str:
+    track = sp.track(track_id)
+    return track["name"]
+
+
+def get_album_name(album_id: str) -> str:
+    album = sp.album(album_id)
+    return album["name"]
 
 
 def _get_tracks_in_page(track_ids: Set[str], i: int, item_limit: int):
