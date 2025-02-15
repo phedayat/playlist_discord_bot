@@ -37,7 +37,7 @@ class PlaylistBot(Client):
             if res:
                 share_type, asset_id = res.groups()
                 n_tracks = get_playlist_length()
-
+                
                 if tracks_to_add := get_tracks_to_add(share_type, asset_id, n_tracks):
                     try:
                         for track_id in tracks_to_add:
@@ -45,18 +45,20 @@ class PlaylistBot(Client):
                             add_track_to_playlist(track_uri)
                         if share_type == ShareType.TRACK:
                             track_name = get_track_name(asset_id)
-                            await message.reply(f"Track added to \"{self.playlist_name}\": {track_name}")
+                            await message.reply(f"Track \"{track_name}\" added to \"{self.playlist_name}\"")
                         else:
                             album_name = get_album_name(asset_id)
-                            await message.reply(f"Album added to \"{self.playlist_name}\": {album_name}")
+                            await message.reply(f"Album \"{album_name}\" added to \"{self.playlist_name}\"")
                         return
                     except DiscordException as e:
                         print(f"Error: {e}")
                 else:
                     if share_type == ShareType.TRACK:
-                        await message.reply(f"Song already exists in playlist \"{self.playlist_name}\"")
+                        track_name = get_track_name(asset_id)
+                        await message.reply(f"Track \"{track_name}\" already exists in playlist \"{self.playlist_name}\"")
                     else:
-                        await message.reply(f"Whole album already exists in playlist \"{self.playlist_name}\"")
+                        album_name = get_album_name(asset_id)
+                        await message.reply(f"Album \"{album_name}\" already exists in playlist \"{self.playlist_name}\"")
                     return
 
 
