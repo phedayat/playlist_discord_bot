@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 
 from discord.client import Client
 from discord import (
@@ -9,24 +10,23 @@ from discord import (
 )
 
 from spotify_helper import (
+    ShareType,
     get_album_name,
     get_track_name,
     build_track_uri,
     get_tracks_to_add,
     get_playlist_length,
-    add_track_to_playlist,
+    add_tracks_to_playlist,
 )
 
 message_regex_raw = r"[\s\S.]*https://\w+\.spotify.com/(\w+)/(\w+)\?[\s\S.]*"
 message_regex = re.compile(message_regex_raw)
 
-class ShareType:
-    ALBUM = "album"
-    TRACK = "track"
-    PLAYLIST = "playlist"
-
 class PlaylistBot(Client):
-    playlist_name = os.getenv("SPOTIFY_PLAYLIST_NAME")
+    def __init__(self, playlist_id: str, playlist_name: str, **kwargs):
+        super().__init__(**kwargs)
+        self.playlist_name = playlist_name
+        self.playlist_id = playlist_id
 
     async def on_ready(self):
         print(f"Logged in as: {self.user}")
@@ -36,13 +36,13 @@ class PlaylistBot(Client):
             res = re.match(message_regex, message.content)
             if res:
                 share_type, asset_id = res.groups()
-                n_tracks = get_playlist_length()
+                n_tracks = get_playlist_length(self.playlist_id)
                 
-                if tracks_to_add := get_tracks_to_add(share_type, asset_id, n_tracks):
+                if tracks_to_add := get_tracks_to_add(self.playlist_id, share_type, asset_id):
                     try:
-                        for track_id in tracks_to_add:
-                            track_uri = build_track_uri(track_id)
-                            add_track_to_playlist(track_uri)
+                        track_uris = map(build_track_uri, tracks_to_add)
+                        add_tracks_to_playlist(self.playlist_id, track_uris)
+                        
                         if share_type == ShareType.TRACK:
                             track_name = get_track_name(asset_id)
                             await message.reply(f"Track \"{track_name}\" added to \"{self.playlist_name}\"")
@@ -65,7 +65,22 @@ class PlaylistBot(Client):
 if __name__=="__main__":
     intents = Intents.default()
     intents.message_content = True
-    client = PlaylistBot(intents=intents)
+
+    playlist_name = os.getenv("SPOTIFY_PLAYLIST_NAME")
+    playlist_id = os.getenv("SPOTIFY_PLAYLIST_ID")
+
+    if playlist_id is None:
+        print("Must set SPOTIFY_PLAYLIST_ID")
+        sys.exit(1)
+    elif playlist_name is None:
+        print("Must set SPOTIFY_PLAYLIST_NAME")
+        sys.exit(1)
+
+    client = PlaylistBot(
+        playlist_id,
+        playlist_name,
+        intents=intents,
+    )
 
     if token := os.getenv("DISCORD_TOKEN"):
         client.run(token)
