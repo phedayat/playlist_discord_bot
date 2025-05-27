@@ -2,13 +2,18 @@ import os
 
 import spotipy
 
-from typing import List, Set
+from functools import reduce
+from typing import List, Set, Optional
 from concurrent.futures import ThreadPoolExecutor
 
 from spotipy.oauth2 import SpotifyOAuth
 
+class ShareType:
+    ALBUM = "album"
+    TRACK = "track"
+    PLAYLIST = "playlist"
+
 scopes = "playlist-read-collaborative,playlist-modify-public,playlist-modify-private"
-playlist_id = os.getenv("SPOTIFY_PLAYLIST_ID")
 
 sp = spotipy.Spotify(
     auth_manager=SpotifyOAuth(
@@ -20,35 +25,30 @@ sp = spotipy.Spotify(
 )
 
 
-def build_track_uri(track_id):
+def build_track_uri(track_id: str) -> str:
     return f"spotify:track:{track_id}"
 
 
-def get_playlist_length():
+def get_playlist_length(playlist_id: str) -> int:
     res = sp.playlist(playlist_id=playlist_id, fields="tracks.total")
     if res:
         return res["tracks"]["total"]
     return 0
 
 
-# def get_tracks_names(track_ids: List[int]) -> List[str]:
-#     if track_ids == []:
-#         return []
-#     tracks = sp.tracks(track_ids)
-#     track_names = list(map(lambda x: x["name"], tracks))
-#     return track_names
-
-def get_track_name(track_id: str) -> str:
+def get_track_name(track_id: str) -> Optional[str]:
     track = sp.track(track_id)
-    return track["name"]
+    if track:
+        return track["name"]
 
 
-def get_album_name(album_id: str) -> str:
+def get_album_name(album_id: str) -> Optional[str]:
     album = sp.album(album_id)
-    return album["name"]
+    if album:
+        return album["name"]
 
 
-def _get_tracks_in_page(track_ids: Set[str], i: int, item_limit: int):
+def _get_tracks_in_page(playlist_id: str, track_ids: Set[str], i: int, item_limit: int) -> Optional[Set[str]]:
     res = sp.playlist_items(
         playlist_id=playlist_id,
         fields="items.track.id",
@@ -56,19 +56,16 @@ def _get_tracks_in_page(track_ids: Set[str], i: int, item_limit: int):
         offset=i*item_limit,
     )
     if res:
-        l = [
-            item["track"]["id"]
-            for item in res["items"]
-            if item["track"]
-        ]
-        items = frozenset(l)
-        return track_ids & items
+        items = filter(None, res["items"])
+        item_ids = map(lambda track: track["id"], items)
+        item_ids_set = frozenset(item_ids)
+        return track_ids & item_ids_set
 
 
-def _get_album_tracks(album_id):
+def _get_album_tracks(album_id) -> Optional[Set[str]]:
     res = sp.album_tracks(album_id=album_id)
     if res:
-        return [track["id"] for track in res["items"]]
+        return set(map(lambda track: track["id"], res["items"]))
 
 
 def _get_external_playlist_tracks(playlist_id):
@@ -82,7 +79,7 @@ def _get_external_playlist_tracks(playlist_id):
         tracks = res["tracks"]
         out = [item["track"]["id"] for item in tracks["items"] if item["track"]]
 
-        n_pages = int(tracks["total"]/item_limit) + 1
+        n_pages = tracks["total"] // item_limit + 1
         for i in range(n_pages):
             res = sp.playlist(
                 playlist_id=playlist_id,
@@ -91,42 +88,39 @@ def _get_external_playlist_tracks(playlist_id):
             if res:
                 tracks = res["tracks"]
                 out += [item["track"]["id"] for item in tracks["items"]]
-        return out
+        return set(out)
 
 
-def get_tracks_to_add(share_type, asset_id, n_tracks):
-    item_limit = 100
+def get_tracks_to_add(playlist_id: str, share_type: str, asset_id: str) -> Optional[Set[str]]:
     max_workers = 3
-    n_pages = int(n_tracks/item_limit)+1
+    item_limit = 100
+
+    n_tracks = get_playlist_length(playlist_id)
+    n_pages = n_tracks // item_limit + 1
 
     if share_type == "album":
-        if album_tracks := _get_album_tracks(asset_id):
-            track_ids = set(album_tracks)
-        else:
-            track_ids = set()
+        album_tracks = _get_album_tracks(asset_id)
+        track_ids = album_tracks or set()
     elif share_type == "playlist":
-        if playlist_tracks := _get_external_playlist_tracks(asset_id):
-            track_ids = set(playlist_tracks)
-        else:
-            track_ids = set()
+        playlist_tracks = _get_external_playlist_tracks(asset_id)
+        track_ids = playlist_tracks or set()
     else:
         track_ids = set([asset_id])
 
     with ThreadPoolExecutor(max_workers=max_workers) as e:
-        res = e.map(lambda x: _get_tracks_in_page(*x), [
+        args_list = [
             (track_ids, i, item_limit)
             for i in range(n_pages)
-        ])
+        ]
+        res = e.map(lambda x: _get_tracks_in_page(*x), args_list)
         if res:
-            tracks_in_playlist = set()
-            for tracks in res:
-                if tracks:
-                    tracks_in_playlist |= tracks
+            items = filter(None, res)
+            tracks_in_playlist = reduce(lambda x, y: x | y, items)
             return track_ids - tracks_in_playlist
 
 
-def add_track_to_playlist(track_uri):
+def add_tracks_to_playlist(playlist_id: str, track_uris):
     return sp.playlist_add_items(
         playlist_id=playlist_id,
-        items=[track_uri],
+        items=track_uris,
     )
