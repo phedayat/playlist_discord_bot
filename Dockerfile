@@ -5,4 +5,4 @@ WORKDIR /workspace
 
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-ENTRYPOINT [ "python", "main.py" ]
+ENTRYPOINT [ "python", "src/main.py" ]
