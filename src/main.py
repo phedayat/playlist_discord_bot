@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+from dataclasses import dataclass
 
 from discord.client import Client
 from discord import Message, Intents
@@ -14,6 +15,50 @@ from spotify_helper import (
 )
 
 message_regex = re.compile(r"[\s\S.]*https://\w+\.spotify.com/(\w+)/(\w+)\?[\s\S.]*")
+default_blame = "an unknown suspect from long long ago"
+
+@dataclass
+class HistoryScanResult:
+    blame: str | None
+    next_cursor: Message | None
+
+
+async def get_history(curr_asset_id, orig_message_id, history):
+    latest_message = None
+
+    async for message in history:
+        res = re.match(message_regex, message.content)
+        if res:
+            share_type, asset_id = res.groups()
+            print(share_type, asset_id)
+            if asset_id == curr_asset_id:
+                if message.id == orig_message_id:
+                    print("Originating message match")
+                    blame = default_blame
+                else:
+                    created_at_date = message.created_at.date().isoformat()
+                    blame = f"{message.author} @ {created_at_date}"
+                return HistoryScanResult(
+                    blame=blame,
+                    next_cursor=None,
+                )
+        latest_message = message
+    return HistoryScanResult(blame=None, next_cursor=latest_message)
+
+
+async def get_blame(curr_asset_id, orig_message_id, channel):
+    history_factory = channel.history if hasattr(channel, "history") else channel
+    cursor = None
+
+    while True:
+        history = history_factory(limit=300, oldest_first=True, after=cursor)
+        result = await get_history(curr_asset_id, orig_message_id, history)
+        if result.blame is not None:
+            return result.blame
+        if result.next_cursor is None or result.next_cursor == cursor:
+            return False
+        cursor = result.next_cursor
+
 
 class PlaylistBot(Client):
     def __init__(self, playlist_id: str, playlist_name: str, **kwargs):
@@ -43,7 +88,11 @@ class PlaylistBot(Client):
                     
                     await message.reply(f"{share_type_str} \"{asset_name}\" added to \"{self.playlist_name}\"")
                 else:
-                    await message.reply(f"{share_type_str} \"{asset_name}\" already exists in playlist \"{self.playlist_name}\"")
+                    blame = await get_blame(asset_id, message.id, message.channel)
+                    await message.reply(
+                        f"{share_type_str} \"{asset_name}\" already exists in playlist \"{self.playlist_name}\"\n"
+                        f"Blame: {blame}"
+                    )
                 
                 timer_end = perf_counter()
                 duration = timer_end-timer_start
@@ -53,6 +102,8 @@ class PlaylistBot(Client):
 if __name__=="__main__":
     intents = Intents.default()
     intents.message_content = True
+    intents.guild_messages = True
+    intents.messages = True
 
     playlist_name = os.getenv("SPOTIFY_PLAYLIST_NAME")
     playlist_id = os.getenv("SPOTIFY_PLAYLIST_ID")
